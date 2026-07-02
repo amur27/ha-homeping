@@ -14,9 +14,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"ha-notify-agent/internal/config"
 	"ha-notify-agent/internal/hass"
+	"ha-notify-agent/internal/notify"
 )
 
 // version зашивается при сборке релиза через ldflags (см. task-06).
@@ -60,9 +62,13 @@ func run() int {
 	setupLogging(cfg)
 
 	if *testMode {
-		// Пробное уведомление реализуется в task-04; конфиг при этом
+		// Пробное уведомление для проверки разрешений ОС; конфиг
 		// уже проверен выше — режим -test валидирует и его.
-		fmt.Println("режим -test будет реализован в task-04 (нативные уведомления)")
+		if err := (notify.Beeep{}).Show("ha-notify-agent", "Агент работает — уведомления настроены правильно"); err != nil {
+			fmt.Fprintf(os.Stderr, "не удалось показать пробное уведомление: %v\n", err)
+			return 1
+		}
+		fmt.Println("пробное уведомление показано")
 		return 0
 	}
 
@@ -92,10 +98,14 @@ func run() int {
 	}
 	client := hass.New(cfg.HomeAssistant.URL, token, entityIDs)
 
-	// Потребитель событий: до task-04 просто логирует их уровнем info.
+	// Потребитель событий: маршрутизатор строит тексты по конфигу,
+	// применяет троттлинг и показывает нативные уведомления.
+	router := notify.NewRouter(cfg.Entities, notify.Beeep{},
+		time.Duration(cfg.Notifications.MinIntervalSec)*time.Second)
 	go func() {
 		for ev := range client.Events() {
-			slog.Info("событие", "entity", ev.EntityID, "state", ev.State)
+			slog.Debug("событие", "entity", ev.EntityID, "state", ev.State)
+			router.Handle(ev.EntityID, ev.State)
 		}
 	}()
 
