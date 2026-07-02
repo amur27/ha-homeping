@@ -109,16 +109,38 @@ func run() int {
 		}
 	}()
 
-	// Одно подключение без переподключения — устойчивость добавляет task-05.
-	if err := client.Run(ctx); err != nil {
+	// Супервизор: переподключение с бэкоффом и одноразовые уведомления
+	// о простое дольше 30 секунд / о восстановлении связи
+	// (docs/spec.md, разделы 5 и 6).
+	sup := &hass.Supervisor{
+		Run: func(ctx context.Context, onReady func()) error {
+			client.OnReady = onReady
+			return client.Run(ctx)
+		},
+		Backoff:   hass.NewBackoff(),
+		DownAfter: 30 * time.Second,
+	}
+	if cfg.NotifyOnDisconnect() {
+		notifier := notify.Beeep{}
+		sup.OnDown = func() {
+			if err := notifier.Show("ha-notify-agent", "⚠️ Home Assistant недоступен"); err != nil {
+				slog.Warn("не удалось показать уведомление о простое", "error", err)
+			}
+		}
+		sup.OnUp = func() {
+			if err := notifier.Show("ha-notify-agent", "✅ Связь с Home Assistant восстановлена"); err != nil {
+				slog.Warn("не удалось показать уведомление о восстановлении", "error", err)
+			}
+		}
+	}
+
+	if err := sup.Loop(ctx); err != nil {
 		if errors.Is(err, hass.ErrAuthInvalid) {
 			fmt.Fprintf(os.Stderr, "ошибка аутентификации: %v\n", err)
 			return 3
 		}
-		if ctx.Err() == nil {
-			slog.Error("клиент завершился с ошибкой", "error", err)
-			return 1
-		}
+		slog.Error("агент завершился с ошибкой", "error", err)
+		return 1
 	}
 
 	slog.Info("получен сигнал завершения, агент останавливается")
