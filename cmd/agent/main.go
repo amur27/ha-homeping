@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"syscall"
 
 	"ha-notify-agent/internal/config"
+	"ha-notify-agent/internal/hass"
 )
 
 // version зашивается при сборке релиза через ldflags (см. task-06).
@@ -66,7 +68,8 @@ func run() int {
 
 	// Токен нужен только для реальной работы с HA; в режимах -version/-test
 	// он не требуется. Значение токена никогда не логируется.
-	if _, err := cfg.Token(); err != nil {
+	token, err := cfg.Token()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
 		return 2
 	}
@@ -82,8 +85,31 @@ func run() int {
 		"ha_url", cfg.HomeAssistant.URL,
 		"entities", len(cfg.Entities))
 
-	// Основной цикл появится в task-03/05; каркас просто ждёт сигнала завершения.
-	<-ctx.Done()
+	// Список entity_id для подписки — из конфигурации.
+	entityIDs := make([]string, len(cfg.Entities))
+	for i, e := range cfg.Entities {
+		entityIDs[i] = e.ID
+	}
+	client := hass.New(cfg.HomeAssistant.URL, token, entityIDs)
+
+	// Потребитель событий: до task-04 просто логирует их уровнем info.
+	go func() {
+		for ev := range client.Events() {
+			slog.Info("событие", "entity", ev.EntityID, "state", ev.State)
+		}
+	}()
+
+	// Одно подключение без переподключения — устойчивость добавляет task-05.
+	if err := client.Run(ctx); err != nil {
+		if errors.Is(err, hass.ErrAuthInvalid) {
+			fmt.Fprintf(os.Stderr, "ошибка аутентификации: %v\n", err)
+			return 3
+		}
+		if ctx.Err() == nil {
+			slog.Error("клиент завершился с ошибкой", "error", err)
+			return 1
+		}
+	}
 
 	slog.Info("получен сигнал завершения, агент останавливается")
 	return 0
