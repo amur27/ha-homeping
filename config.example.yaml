@@ -1,0 +1,38 @@
+# Пример конфигурации агента ha-notify-agent.
+# Логика файла: образец для копирования в стандартный каталог настроек ОС
+# (Windows: %APPDATA%\ha-notify-agent\config.yaml,
+#  macOS: ~/Library/Application Support/ha-notify-agent/config.yaml).
+# Токен в этом файле НЕ хранится — только имя переменной окружения.
+# Полное описание формата — docs/spec.md, раздел 3.
+
+homeassistant:
+  # URL WebSocket API Home Assistant; допустимы схемы ws:// и wss://
+  url: "ws://homeassistant.local:8123/api/websocket"
+  # Имя переменной окружения с long-lived токеном (по умолчанию HA_TOKEN)
+  token_env: "HA_TOKEN"
+
+# Сущности, о смене состояния которых уведомлять.
+# У каждой обязателен id и РОВНО ОДНО из полей: states или template.
+entities:
+  # Вариант 1: явный маппинг «состояние → текст уведомления».
+  # Состояние, которого нет в маппинге, уведомления не порождает.
+  - id: binary_sensor.front_door
+    name: "Входная дверь"          # заголовок уведомления; по умолчанию равен id
+    states:
+      "on": "🚪 Дверь открыта"
+      "off": "Дверь закрыта"
+
+  # Вариант 2: шаблон для любого значения; {state} заменяется состоянием.
+  # - id: sensor.living_room_temperature
+  #   name: "Температура в гостиной"
+  #   template: "Сейчас {state} °C"
+
+notifications:
+  # Троттлинг: не чаще одного уведомления на сущность за N секунд (по умолчанию 3)
+  min_interval_sec: 3
+  # Уведомлять о потере/восстановлении связи с HA (по умолчанию true)
+  on_disconnect: true
+
+logging:
+  # Уровень логирования: debug | info | warn | error (по умолчанию info)
+  level: "info"

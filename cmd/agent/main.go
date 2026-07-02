@@ -1,8 +1,8 @@
 // Точка входа агента ha-notify-agent.
 // Логика модуля: разбор флагов командной строки (-config, -test, -version),
-// определение пути к конфигурации, настройка graceful shutdown по сигналам ОС
-// и запуск основного цикла агента. Сами подсистемы (конфиг, клиент Home Assistant,
-// уведомления) подключаются в последующих задачах (task-02…05) — здесь каркас.
+// загрузка и валидация конфигурации, настройка логирования (slog),
+// graceful shutdown по сигналам ОС и запуск основного цикла агента.
+// Клиент Home Assistant и уведомления подключаются в task-03…05.
 package main
 
 import (
@@ -48,10 +48,27 @@ func run() int {
 		*configPath = p
 	}
 
+	// Загрузка и валидация конфигурации; любая ошибка — код выхода 2
+	// (docs/spec.md, раздел 8).
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
+		return 2
+	}
+	setupLogging(cfg)
+
 	if *testMode {
-		// Пробное уведомление реализуется в task-04; пока каркас честно сообщает об этом.
+		// Пробное уведомление реализуется в task-04; конфиг при этом
+		// уже проверен выше — режим -test валидирует и его.
 		fmt.Println("режим -test будет реализован в task-04 (нативные уведомления)")
 		return 0
+	}
+
+	// Токен нужен только для реальной работы с HA; в режимах -version/-test
+	// он не требуется. Значение токена никогда не логируется.
+	if _, err := cfg.Token(); err != nil {
+		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
+		return 2
 	}
 
 	// Контекст отменяется по Ctrl+C (SIGINT) или SIGTERM — все подсистемы
@@ -59,11 +76,25 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	slog.Info("агент запущен (каркас)", "version", version, "config", *configPath)
+	slog.Info("конфигурация загружена",
+		"version", version,
+		"config", *configPath,
+		"ha_url", cfg.HomeAssistant.URL,
+		"entities", len(cfg.Entities))
 
 	// Основной цикл появится в task-03/05; каркас просто ждёт сигнала завершения.
 	<-ctx.Done()
 
 	slog.Info("получен сигнал завершения, агент останавливается")
 	return 0
+}
+
+// setupLogging настраивает глобальный slog: текстовый вывод в stderr
+// с уровнем из конфигурации (docs/spec.md, раздел 7). Файл журнала
+// не открывается — перенаправление вывода обеспечивают Task Scheduler/launchd.
+func setupLogging(cfg *config.Config) {
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: cfg.SlogLevel(),
+	})
+	slog.SetDefault(slog.New(handler))
 }
