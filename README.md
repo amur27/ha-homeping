@@ -25,12 +25,30 @@
 | [docs/setup-clients.md](docs/setup-clients.md) | Установка и автозапуск агента на Windows и macOS |
 | [docs/tasks/README.md](docs/tasks/README.md) | Декомпозиция реализации на задачи для ИИ-агентов |
 
+## Сборка
+
+Требуется Go ≥ 1.22 и git. Из корня репозитория:
+
+```powershell
+# Windows
+.\scripts\build.ps1
+```
+
+```bash
+# macOS / Linux
+./scripts/build.sh
+```
+
+Результат в `dist/`: `ha-notify-agent.exe` (Windows amd64) и `ha-notify-agent-darwin-arm64` (macOS Apple Silicon). Версия зашивается из `git describe` и доступна через `ha-notify-agent -version`. Обе платформы собираются без cgo (`CGO_ENABLED=0`) с любой машины.
+
+Проверка после установки: `ha-notify-agent -test` — должно появиться нативное уведомление ОС.
+
 ## Порядок работы
 
 1. Прочитать [architecture.md](docs/architecture.md) и [spec.md](docs/spec.md).
-2. Выполнить задачи из [docs/tasks/](docs/tasks/README.md) по порядку — каждая самодостаточна и имеет критерии приёмки.
-3. Настроить окружения по инструкциям `setup-*.md`.
+2. Настроить Home Assistant по [setup-home-assistant.md](docs/setup-home-assistant.md) (токены, entity_id).
+3. Собрать бинарники (раздел «Сборка») и развернуть по [setup-clients.md](docs/setup-clients.md).
 
 ## Статус
 
-Пакет документации готов; реализация агента — по задачам из `docs/tasks/`.
+Задачи task-01…06 выполнены: агент реализован, покрыт тестами, скрипты сборки готовы. Осталось выполнить сквозной сценарий приёмки на реальном окружении (Windows-ПК, MacBook, Home Assistant) — см. [docs/tasks/README.md](docs/tasks/README.md).
