@@ -217,23 +217,57 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 }
 
-// TestToken проверяет чтение токена из переменной окружения:
-// установленная переменная возвращает значение, пустая — ошибку.
-func TestToken(t *testing.T) {
-	cfg := &Config{HomeAssistant: HomeAssistant{TokenEnv: "TEST_HA_TOKEN_VAR"}}
+// TestSaveRoundtrip проверяет атомарную запись: Save → Load возвращает
+// эквивалентную конфигурацию, существующий файл заменяется целиком.
+func TestSaveRoundtrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "вложенный", "config.yaml")
+	v := false
+	cfg := &Config{
+		HomeAssistant: HomeAssistant{URL: "ws://ha.local:8123/api/websocket"},
+		Entities: []Entity{
+			{ID: "binary_sensor.door", Name: "Дверь", States: map[string]string{"on": "Открыта"}},
+			{ID: "sensor.temp", Template: "Сейчас {state} °C"},
+		},
+		Notifications: Notifications{MinIntervalSec: 7, OnDisconnect: &v},
+	}
 
-	t.Setenv("TEST_HA_TOKEN_VAR", "secret-token-value")
-	token, err := cfg.Token()
+	if err := Save(cfg, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(path)
 	if err != nil {
-		t.Fatalf("Token() вернула ошибку при установленной переменной: %v", err)
+		t.Fatalf("Load после Save: %v", err)
 	}
-	if token != "secret-token-value" {
-		t.Errorf("Token() = %q, ожидалось значение переменной окружения", token)
+	if loaded.HomeAssistant.URL != cfg.HomeAssistant.URL {
+		t.Errorf("url после перезагрузки = %q", loaded.HomeAssistant.URL)
+	}
+	if len(loaded.Entities) != 2 || loaded.Entities[0].States["on"] != "Открыта" ||
+		loaded.Entities[1].Template != "Сейчас {state} °C" {
+		t.Errorf("сущности после перезагрузки искажены: %+v", loaded.Entities)
+	}
+	if loaded.Notifications.MinIntervalSec != 7 || loaded.NotifyOnDisconnect() {
+		t.Errorf("настройки уведомлений после перезагрузки искажены: %+v", loaded.Notifications)
 	}
 
-	t.Setenv("TEST_HA_TOKEN_VAR", "")
-	if _, err := cfg.Token(); err == nil {
-		t.Error("Token() должна вернуть ошибку при пустой переменной окружения")
+	// Повторная запись поверх существующего файла (путь Windows: Remove+Rename).
+	cfg.Notifications.MinIntervalSec = 9
+	if err := Save(cfg, path); err != nil {
+		t.Fatalf("повторный Save: %v", err)
+	}
+	loaded, err = Load(path)
+	if err != nil || loaded.Notifications.MinIntervalSec != 9 {
+		t.Fatalf("после повторного Save: cfg=%+v, err=%v", loaded, err)
+	}
+}
+
+// TestSaveInvalid: невалидная конфигурация не сохраняется и не трогает файл.
+func TestSaveInvalid(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := Save(&Config{}, path); err == nil {
+		t.Fatal("Save пустой конфигурации должен вернуть ошибку валидации")
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("файл не должен был появиться после неудачного Save")
 	}
 }
 

@@ -1,8 +1,9 @@
 // Точка входа агента homeping.
-// Логика модуля: разбор флагов командной строки (-config, -test, -version),
-// загрузка и валидация конфигурации, настройка логирования (slog),
-// graceful shutdown по сигналам ОС и запуск основного цикла агента.
-// Клиент Home Assistant и уведомления подключаются в task-03…05.
+// Логика модуля: разбор флагов командной строки (-config, -test, -version,
+// -no-tray), настройка логирования (файл с ротацией + stderr, уровень меняется
+// при hot-reload), запуск супервизора internal/agent и graceful shutdown
+// по сигналам ОС. До появления трея (task-08) агент всегда работает
+// в headless-режиме FailFast: коды выхода 2/3 как в v1 (docs/spec.md, раздел 12).
 package main
 
 import (
@@ -14,14 +15,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"homeping/internal/agent"
 	"homeping/internal/config"
 	"homeping/internal/hass"
+	"homeping/internal/logging"
 	"homeping/internal/notify"
 )
 
-// version зашивается при сборке релиза через ldflags (см. task-06).
+// version зашивается при сборке релиза через ldflags (см. scripts/build.ps1).
 var version = "dev"
 
 func main() {
@@ -29,13 +31,17 @@ func main() {
 }
 
 // run содержит всю логику процесса и возвращает код выхода
-// (коды описаны в docs/spec.md, раздел 8). Выделена из main,
+// (коды описаны в docs/spec.md, раздел 12). Выделена из main,
 // чтобы defer-ы отрабатывали до os.Exit.
 func run() int {
 	configPath := flag.String("config", "", "путь к YAML-файлу конфигурации (по умолчанию — стандартный каталог настроек ОС)")
 	testMode := flag.Bool("test", false, "показать пробное уведомление и выйти")
 	showVersion := flag.Bool("version", false, "вывести версию и выйти")
+	// Флаг заведён по спецификации v2; до реализации трея (task-08)
+	// агент работает headless независимо от его значения.
+	noTray := flag.Bool("no-tray", false, "headless-режим: без иконки в трее и веб-интерфейса")
 	flag.Parse()
+	_ = noTray
 
 	if *showVersion {
 		fmt.Println(version)
@@ -52,18 +58,9 @@ func run() int {
 		*configPath = p
 	}
 
-	// Загрузка и валидация конфигурации; любая ошибка — код выхода 2
-	// (docs/spec.md, раздел 8).
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
-		return 2
-	}
-	setupLogging(cfg)
-
 	if *testMode {
-		// Пробное уведомление для проверки разрешений ОС; конфиг
-		// уже проверен выше — режим -test валидирует и его.
+		// Пробное уведомление для проверки разрешений ОС;
+		// конфиг и логирование для этого не нужны.
 		if err := (notify.Beeep{}).Show("HomePing", "Агент работает — уведомления настроены правильно"); err != nil {
 			fmt.Fprintf(os.Stderr, "не удалось показать пробное уведомление: %v\n", err)
 			return 1
@@ -72,87 +69,64 @@ func run() int {
 		return 0
 	}
 
-	// Токен нужен только для реальной работы с HA; в режимах -version/-test
-	// он не требуется. Значение токена никогда не логируется.
-	token, err := cfg.Token()
+	// Первичная загрузка конфига — ради настроек логирования; дальше конфиг
+	// живёт внутри супервизора (hot-reload). Ошибка — код 2 (headless-режим).
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
 		return 2
 	}
+	setupLogging(cfg)
 
 	// Контекст отменяется по Ctrl+C (SIGINT) или SIGTERM — все подсистемы
 	// агента обязаны завершаться по его отмене.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	slog.Info("конфигурация загружена",
+	slog.Info("агент запускается",
 		"version", version,
 		"config", *configPath,
 		"ha_url", cfg.HomeAssistant.URL,
 		"entities", len(cfg.Entities))
 
-	// Список entity_id для подписки — из конфигурации.
-	entityIDs := make([]string, len(cfg.Entities))
-	for i, e := range cfg.Entities {
-		entityIDs[i] = e.ID
-	}
-	client := hass.New(cfg.HomeAssistant.URL, token, entityIDs)
-
-	// Потребитель событий: маршрутизатор строит тексты по конфигу,
-	// применяет троттлинг и показывает нативные уведомления.
-	router := notify.NewRouter(cfg.Entities, notify.Beeep{},
-		time.Duration(cfg.Notifications.MinIntervalSec)*time.Second)
-	go func() {
-		for ev := range client.Events() {
-			slog.Debug("событие", "entity", ev.EntityID, "state", ev.State)
-			router.Handle(ev.EntityID, ev.State)
-		}
-	}()
-
-	// Супервизор: переподключение с бэкоффом и одноразовые уведомления
-	// о простое дольше 30 секунд / о восстановлении связи
-	// (docs/spec.md, разделы 5 и 6).
-	sup := &hass.Supervisor{
-		Run: func(ctx context.Context, onReady func()) error {
-			client.OnReady = onReady
-			return client.Run(ctx)
-		},
-		Backoff:   hass.NewBackoff(),
-		DownAfter: 30 * time.Second,
-	}
-	if cfg.NotifyOnDisconnect() {
-		notifier := notify.Beeep{}
-		sup.OnDown = func() {
-			if err := notifier.Show("HomePing", "⚠️ Home Assistant недоступен"); err != nil {
-				slog.Warn("не удалось показать уведомление о простое", "error", err)
-			}
-		}
-		sup.OnUp = func() {
-			if err := notifier.Show("HomePing", "✅ Связь с Home Assistant восстановлена"); err != nil {
-				slog.Warn("не удалось показать уведомление о восстановлении", "error", err)
-			}
-		}
+	a := &agent.Agent{
+		ConfigPath: *configPath,
+		Notifier:   notify.Beeep{},
+		// До task-08 трея нет — ошибки конфигурации и токена фатальны, как в v1.
+		FailFast: true,
+		// При hot-reload применяется новый уровень логирования.
+		OnConfig: func(c *config.Config) { logging.SetLevel(c.SlogLevel()) },
 	}
 
-	if err := sup.Loop(ctx); err != nil {
-		if errors.Is(err, hass.ErrAuthInvalid) {
-			fmt.Fprintf(os.Stderr, "ошибка аутентификации: %v\n", err)
+	// Фатальные ошибки логируются через slog: он пишет и в stderr,
+	// и в файл логов — единственный след при запуске без консоли.
+	if err := a.Run(ctx); err != nil {
+		switch {
+		case errors.Is(err, hass.ErrAuthInvalid):
+			slog.Error("ошибка аутентификации", "error", err)
 			return 3
+		case errors.Is(err, agent.ErrConfig):
+			slog.Error("агент не запущен", "error", err)
+			return 2
+		default:
+			slog.Error("агент завершился с ошибкой", "error", err)
+			return 1
 		}
-		slog.Error("агент завершился с ошибкой", "error", err)
-		return 1
 	}
-
-	slog.Info("получен сигнал завершения, агент останавливается")
 	return 0
 }
 
-// setupLogging настраивает глобальный slog: текстовый вывод в stderr
-// с уровнем из конфигурации (docs/spec.md, раздел 7). Файл журнала
-// не открывается — перенаправление вывода обеспечивают Task Scheduler/launchd.
+// setupLogging настраивает глобальный slog: файл с ротацией + stderr
+// (docs/spec.md, раздел 11). Недоступность файла логов не фатальна —
+// агент важнее журнала, остаётся вывод в stderr.
 func setupLogging(cfg *config.Config) {
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: cfg.SlogLevel(),
-	})
-	slog.SetDefault(slog.New(handler))
+	logPath := cfg.Logging.File
+	if logPath == "" {
+		p, err := logging.DefaultPath()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "путь логов по умолчанию недоступен, логи только в stderr: %v\n", err)
+		}
+		logPath = p
+	}
+	logging.Setup(cfg.SlogLevel(), logPath)
 }

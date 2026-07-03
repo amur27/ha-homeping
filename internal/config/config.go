@@ -1,8 +1,8 @@
 // Пакет config отвечает за конфигурацию агента.
 // Логика модуля: структуры конфигурации, загрузка YAML-файла в строгом режиме
 // (неизвестные ключи — ошибка), заполнение значений по умолчанию, валидация
-// по правилам docs/spec.md (раздел 3.2) и получение long-lived токена
-// Home Assistant из переменной окружения. Сам токен в файле не хранится.
+// по правилам docs/spec.md (раздел 3.2) и атомарная запись конфига (save.go).
+// Токен в файле не хранится — его получение реализует пакет secrets.
 package config
 
 import (
@@ -46,9 +46,9 @@ type Entity struct {
 	Name string `yaml:"name"`
 	// States — маппинг «состояние → текст уведомления»;
 	// состояние без записи в маппинге уведомления не порождает.
-	States map[string]string `yaml:"states"`
+	States map[string]string `yaml:"states,omitempty"`
 	// Template — шаблон текста для любого состояния; {state} заменяется значением.
-	Template string `yaml:"template"`
+	Template string `yaml:"template,omitempty"`
 }
 
 // Notifications — общие настройки показа уведомлений.
@@ -64,6 +64,9 @@ type Notifications struct {
 type Logging struct {
 	// Level — уровень: debug | info | warn | error.
 	Level string `yaml:"level"`
+	// File — путь к файлу логов; пусто — путь по умолчанию для текущей ОС
+	// (docs/spec.md, раздел 11).
+	File string `yaml:"file,omitempty"`
 }
 
 // Load читает YAML-файл конфигурации в строгом режиме, заполняет значения
@@ -155,17 +158,6 @@ func (c *Config) validate() error {
 		return fmt.Errorf("logging.level: %w", err)
 	}
 	return nil
-}
-
-// Token возвращает long-lived токен из переменной окружения, указанной
-// в token_env. Пустое значение — ошибка конфигурации. Значение токена
-// намеренно не логируется нигде в агенте.
-func (c *Config) Token() (string, error) {
-	token := os.Getenv(c.HomeAssistant.TokenEnv)
-	if token == "" {
-		return "", fmt.Errorf("переменная окружения %s не установлена или пуста — поместите в неё long-lived токен Home Assistant", c.HomeAssistant.TokenEnv)
-	}
-	return token, nil
 }
 
 // NotifyOnDisconnect сообщает, нужно ли уведомлять о потере/восстановлении
