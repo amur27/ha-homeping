@@ -24,6 +24,7 @@ import (
 	"homeping/internal/logging"
 	"homeping/internal/notify"
 	"homeping/internal/tray"
+	"homeping/internal/webui"
 )
 
 // version зашивается при сборке релиза через ldflags (см. scripts/build.ps1).
@@ -69,6 +70,21 @@ func run() int {
 		return 0
 	}
 
+	// Первый запуск в трей-режиме: файла конфигурации ещё нет — создаём
+	// валидную заготовку и позже сами открываем страницу настроек
+	// (docs/spec.md, раздел 2). Токена заготовка не задаёт, поэтому агент
+	// стартует со статусом «не настроен».
+	firstRun := false
+	if !*noTray {
+		if _, err := os.Stat(*configPath); os.IsNotExist(err) {
+			if err := config.Save(config.Starter(), *configPath); err != nil {
+				fmt.Fprintf(os.Stderr, "не удалось создать конфигурацию-заготовку: %v\n", err)
+				return 2
+			}
+			firstRun = true
+		}
+	}
+
 	// Первичная загрузка конфига — ради настроек логирования; дальше конфиг
 	// живёт внутри супервизора (hot-reload). В headless-режиме ошибка
 	// фатальна (код 2), в трей-режиме агент запускается и ждёт исправления.
@@ -102,6 +118,29 @@ func run() int {
 		return exitCode(a.Run(ctx))
 	}
 
+	// Веб-интерфейс настроек: слушает только 127.0.0.1, открывается
+	// из меню трея. Его отказ не фатален — агент работает и без него.
+	ui := &webui.Server{Agent: a, Version: version, ConfigPath: *configPath}
+	trayOpts := tray.Options{
+		Agent:       a,
+		Version:     version,
+		ConfigPath:  *configPath,
+		RequestExit: stop,
+	}
+	if err := ui.Start(); err != nil {
+		slog.Error("веб-интерфейс настроек не запустился", "error", err)
+	} else {
+		defer ui.Close()
+		trayOpts.SettingsURL = ui.URL
+	}
+
+	// Первый запуск: сразу открываем страницу настроек — пользователю
+	// нужно ввести URL Home Assistant и токен.
+	if firstRun {
+		slog.Info("первый запуск: создана конфигурация-заготовка, открываю настройки")
+		tray.OpenSettings(trayOpts)
+	}
+
 	// Трей-режим: systray блокирует главную горутину, агент — в фоне.
 	// Остановка с любой стороны сходится в одну точку: отмена ctx →
 	// супервизор завершается → цикл трея закрывается.
@@ -110,12 +149,7 @@ func run() int {
 		done <- a.Run(ctx)
 		tray.Quit()
 	}()
-	tray.Run(tray.Options{
-		Agent:       a,
-		Version:     version,
-		ConfigPath:  *configPath,
-		RequestExit: stop,
-	})
+	tray.Run(trayOpts)
 	return exitCode(<-done)
 }
 

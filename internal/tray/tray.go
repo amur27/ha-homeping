@@ -32,6 +32,9 @@ type Options struct {
 	Version string
 	// ConfigPath — путь к YAML-конфигу для пунктов «Открыть/Перечитать конфиг».
 	ConfigPath string
+	// SettingsURL возвращает адрес страницы настроек со свежим
+	// сессионным токеном (webui.Server.URL) — открывается в браузере.
+	SettingsURL func() string
 	// RequestExit останавливает агента (отмена его контекста);
 	// цикл трея завершает main после остановки агента.
 	RequestExit func()
@@ -56,8 +59,10 @@ func onReady(o Options) {
 	statusItem.Disable()
 	systray.AddSeparator()
 
-	settingsItem := systray.AddMenuItem("Настройки…", "веб-интерфейс настроек (появится в task-09)")
-	settingsItem.Disable() // активируется в task-09
+	settingsItem := systray.AddMenuItem("Настройки…", "открыть страницу настроек в браузере")
+	if o.SettingsURL == nil {
+		settingsItem.Disable() // веб-интерфейс не запустился
+	}
 	testItem := systray.AddMenuItem("Тестовое уведомление", "проверка разрешений ОС")
 	pauseItem := systray.AddMenuItemCheckbox("Пауза уведомлений", "события не показываются, соединение сохраняется", false)
 	systray.AddSeparator()
@@ -83,6 +88,9 @@ func onReady(o Options) {
 	go func() {
 		for {
 			select {
+			case <-settingsItem.ClickedCh:
+				OpenSettings(o)
+
 			case <-testItem.ClickedCh:
 				if err := o.Agent.TestNotification(); err != nil {
 					slog.Warn("не удалось показать пробное уведомление", "error", err)
@@ -154,6 +162,19 @@ func icon(name string) []byte {
 		return nil
 	}
 	return data
+}
+
+// OpenSettings открывает страницу настроек в браузере по умолчанию.
+// Экспортирована: main вызывает её сам при первом запуске без конфига
+// (docs/spec.md, раздел 2).
+func OpenSettings(o Options) {
+	if o.SettingsURL == nil {
+		return
+	}
+	if err := openFile(o.SettingsURL()); err != nil {
+		slog.Warn("не удалось открыть браузер", "error", err)
+		showError(o, "Не удалось открыть браузер с настройками: "+err.Error())
+	}
 }
 
 // openConfig открывает YAML в приложении по умолчанию.

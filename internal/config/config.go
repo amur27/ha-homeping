@@ -22,51 +22,54 @@ const (
 )
 
 // Config — корневая структура файла конфигурации (docs/spec.md, раздел 3.1).
+// JSON-теги повторяют YAML: структура используется и как тело API
+// веб-интерфейса настроек (docs/spec.md, раздел 8.3).
 type Config struct {
-	HomeAssistant HomeAssistant `yaml:"homeassistant"`
-	Entities      []Entity      `yaml:"entities"`
-	Notifications Notifications `yaml:"notifications"`
-	Logging       Logging       `yaml:"logging"`
+	HomeAssistant HomeAssistant `yaml:"homeassistant" json:"homeassistant"`
+	Entities      []Entity      `yaml:"entities" json:"entities"`
+	Notifications Notifications `yaml:"notifications" json:"notifications"`
+	Logging       Logging       `yaml:"logging" json:"logging"`
 }
 
 // HomeAssistant — параметры подключения к Home Assistant.
 type HomeAssistant struct {
 	// URL WebSocket API; допустимы только схемы ws:// и wss://.
-	URL string `yaml:"url"`
-	// TokenEnv — имя переменной окружения с long-lived токеном.
-	TokenEnv string `yaml:"token_env"`
+	URL string `yaml:"url" json:"url"`
+	// TokenEnv — имя переменной окружения с long-lived токеном
+	// (резервный источник после системного хранилища).
+	TokenEnv string `yaml:"token_env" json:"token_env,omitempty"`
 }
 
 // Entity — наблюдаемая сущность и правила построения текста уведомления.
 // Должно быть задано ровно одно из полей States или Template.
 type Entity struct {
 	// ID — entity_id в Home Assistant, например binary_sensor.front_door.
-	ID string `yaml:"id"`
+	ID string `yaml:"id" json:"id"`
 	// Name — заголовок уведомления; по умолчанию равен ID.
-	Name string `yaml:"name"`
+	Name string `yaml:"name" json:"name"`
 	// States — маппинг «состояние → текст уведомления»;
 	// состояние без записи в маппинге уведомления не порождает.
-	States map[string]string `yaml:"states,omitempty"`
+	States map[string]string `yaml:"states,omitempty" json:"states,omitempty"`
 	// Template — шаблон текста для любого состояния; {state} заменяется значением.
-	Template string `yaml:"template,omitempty"`
+	Template string `yaml:"template,omitempty" json:"template,omitempty"`
 }
 
 // Notifications — общие настройки показа уведомлений.
 type Notifications struct {
 	// MinIntervalSec — троттлинг: не чаще одного уведомления на сущность за N секунд.
-	MinIntervalSec int `yaml:"min_interval_sec"`
+	MinIntervalSec int `yaml:"min_interval_sec" json:"min_interval_sec"`
 	// OnDisconnect — уведомлять о потере/восстановлении связи с HA.
 	// Указатель различает «не задано» (по умолчанию true) и явное false.
-	OnDisconnect *bool `yaml:"on_disconnect"`
+	OnDisconnect *bool `yaml:"on_disconnect" json:"on_disconnect"`
 }
 
 // Logging — настройки логирования.
 type Logging struct {
 	// Level — уровень: debug | info | warn | error.
-	Level string `yaml:"level"`
+	Level string `yaml:"level" json:"level"`
 	// File — путь к файлу логов; пусто — путь по умолчанию для текущей ОС
 	// (docs/spec.md, раздел 11).
-	File string `yaml:"file,omitempty"`
+	File string `yaml:"file,omitempty" json:"file,omitempty"`
 }
 
 // Load читает YAML-файл конфигурации в строгом режиме, заполняет значения

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<!--
+  Страница настроек homeping (docs/spec.md, раздел 8.2).
+  Логика файла: единственная страница веб-интерфейса — редактирование
+  конфигурации (подключение, сущности, уведомления, логирование),
+  ввод токена HA, статус подключения и тестовое уведомление.
+  Без внешних зависимостей и CDN — работает без интернета; тема
+  светлая/тёмная по prefers-color-scheme. Все запросы — к локальному
+  API агента (см. server.go), авторизация — cookie сессии.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomePing — настройки</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1c1e21; --muted: #65707c;
+    --border: #d9dee4; --accent: #2f7d4f; --accent-text: #ffffff;
+    --danger: #c0392b; --ok: #2f7d4f; --input-bg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191c; --card: #212429; --text: #e8eaed; --muted: #9aa4af;
+      --border: #363b42; --accent: #3d9b64; --accent-text: #ffffff;
+      --danger: #e0604f; --ok: #4caf7d; --input-bg: #17191c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 .dot { font-size: 14px; vertical-align: middle; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .status-line { color: var(--muted); margin: 0 0 20px; min-height: 22px; }
+  .status-line b { color: var(--text); }
+  section {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; margin-bottom: 16px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px;
+    background: var(--input-bg); color: var(--text); font: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    padding: 8px 14px; border: 1px solid var(--border); border-radius: 7px;
+    background: var(--card); color: var(--text); font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > .grow { flex: 1 1 200px; }
+  .entity {
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px;
+  }
+  .entity .head { display: flex; gap: 10px; align-items: flex-end; }
+  .entity .head .grow { flex: 1; }
+  .state-row { display: flex; gap: 8px; margin-top: 6px; }
+  .state-row input:first-child { max-width: 160px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .checkbox { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; color: var(--text); }
+  .checkbox input { width: auto; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    padding: 10px 18px; border-radius: 8px; background: var(--text); color: var(--bg);
+    opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 90%;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { background: var(--danger); color: #fff; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 24px; }
+  .ok { color: var(--ok); } .bad { color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🏠 HomePing <span class="dot" id="status-dot">●</span></h1>
+  <p class="status-line" id="status-line">Загрузка…</p>
+
+  <section>
+    <h2>Подключение к Home Assistant</h2>
+    <label for="ha-url">URL WebSocket API (ws:// или wss://)</label>
+    <input type="text" id="ha-url" placeholder="ws://homeassistant.local:8123/api/websocket">
+    <label for="ha-token">Long-lived токен <span id="token-state"></span></label>
+    <div class="row">
+      <input type="password" id="ha-token" class="grow" placeholder="вставьте токен из профиля HA" autocomplete="off">
+      <button id="save-token">Сохранить токен</button>
+    </div>
+    <p class="hint">Токен хранится в системном хранилище учётных данных и никогда не показывается. Создать: профиль HA → Безопасность → Long-lived access tokens.</p>
+    <div class="row" style="margin-top:12px">
+      <button id="check-conn">Проверить подключение</button>
+      <button id="test-notify">Тестовое уведомление</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Сущности</h2>
+    <div id="entities"></div>
+    <button id="add-entity" class="small">+ Добавить сущность</button>
+    <p class="hint">Режим «Состояния»: уведомление только для перечисленных состояний. Режим «Шаблон»: уведомление для любого значения, {state} заменяется состоянием.</p>
+  </section>
+
+  <section>
+    <h2>Уведомления и журнал</h2>
+    <div class="row">
+      <div class="grow">
+        <label for="min-interval">Минимальный интервал на сущность, сек (троттлинг)</label>
+        <input type="number" id="min-interval" min="0" step="1">
+      </div>
+      <div class="grow">
+        <label for="log-level">Уровень журнала</label>
+        <select id="log-level">
+          <option value="debug">debug</option>
+          <option value="info">info</option>
+          <option value="warn">warn</option>
+          <option value="error">error</option>
+        </select>
+      </div>
+    </div>
+    <label class="checkbox"><input type="checkbox" id="on-disconnect"> Уведомлять о потере и восстановлении связи с HA</label>
+  </section>
+
+  <div class="row">
+    <button id="save" class="primary">Сохранить и применить</button>
+    <span class="hint">Применяется сразу, без перезапуска агента.</span>
+  </div>
+
+  <footer id="footer">homeping</footer>
+</main>
+<div id="toast"></div>
+
+<script>
+"use strict";
+// Состояние формы: массив сущностей в удобном для редактирования виде.
+let entities = [];
+// Служебные поля конфига, которые страница не редактирует, но обязана
+// сохранить при записи (token_env, путь файла логов).
+let passthrough = { token_env: "", log_file: "" };
+
+const $ = (id) => document.getElementById(id);
+
+// --- Всплывающее сообщение ---------------------------------------------
+let toastTimer = null;
+function toast(text, isError) {
+  const el = $("toast");
+  el.textContent = text;
+  el.className = "show" + (isError ? " error" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ""; }, isError ? 6000 : 2500);
+}
+
+// --- Запросы к API -------------------------------------------------------
+async function api(method, path, body) {
+  const resp = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || ("ошибка " + resp.status));
+  return data;
+}
+
+// --- Статус --------------------------------------------------------------
+async function refreshStatus() {
+  try {
+    const st = await api("GET", "/api/status");
+    const dot = $("status-dot");
+    const good = st.state === "подключён";
+    dot.style.color = good ? "var(--ok)" : (st.state === "подключение…" || st.state === "нет связи") ? "var(--muted)" : "var(--danger)";
+    let text = "Статус: " + st.state + (st.paused ? " · пауза уведомлений" : "");
+    $("status-line").innerHTML = "<b>" + esc(text) + "</b>" + (st.detail ? "<br>" + esc(st.detail) : "");
+    $("token-state").innerHTML = st.token_set ? '<span class="ok">— токен задан</span>' : '<span class="bad">— токен не задан</span>';
+    $("footer").textContent = "homeping " + st.version + " · интерфейс доступен только с этого компьютера";
+  } catch (e) {
+    $("status-line").textContent = "Агент недоступен: " + e.message;
+    $("status-dot").style.color = "var(--danger)";
+  }
+}
+
+function esc(s) {
+  return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// --- Конфигурация: загрузка в форму -------------------------------------
+async function loadConfig() {
+  const cfg = await api("GET", "/api/config");
+  $("ha-url").value = cfg.homeassistant.url || "";
+  passthrough.token_env = cfg.homeassistant.token_env || "";
+  passthrough.log_file = (cfg.logging && cfg.logging.file) || "";
+  $("min-interval").value = cfg.notifications.min_interval_sec;
+  $("on-disconnect").checked = cfg.notifications.on_disconnect !== false;
+  $("log-level").value = (cfg.logging && cfg.logging.level) || "info";
+  entities = (cfg.entities || []).map(e => ({
+    id: e.id || "",
+    name: e.name || "",
+    mode: e.template ? "template" : "states",
+    template: e.template || "",
+    states: Object.entries(e.states || {}).map(([k, v]) => ({ k, v })),
+  }));
+  if (!entities.length) addEntity();
+  renderEntities();
+}
+
+// --- Редактор сущностей ---------------------------------------------------
+function addEntity() {
+  entities.push({ id: "", name: "", mode: "states", template: "", states: [{ k: "on", v: "" }, { k: "off", v: "" }] });
+}
+
+function renderEntities() {
+  const box = $("entities");
+  box.innerHTML = "";
+  entities.forEach((e, i) => {
+    const card = document.createElement("div");
+    card.className = "entity";
+
+    const head = document.createElement("div");
+    head.className = "head";
+    head.appendChild(field("entity_id", e.id, "binary_sensor.front_door", v => e.id = v));
+    head.appendChild(field("Название (заголовок уведомления)", e.name, "Входная дверь", v => e.name = v));
+
+    const modeWrap = document.createElement("div");
+    modeWrap.innerHTML = '<label>Режим</label>';
+    const mode = document.createElement("select");
+    mode.innerHTML = '<option value="states">Состояния</option><option value="template">Шаблон</option>';
+    mode.value = e.mode;
+    mode.onchange = () => { e.mode = mode.value; renderEntities(); };
+    modeWrap.appendChild(mode);
+    head.appendChild(modeWrap);
+
+    const del = document.createElement("button");
+    del.className = "small";
+    del.textContent = "Удалить";
+    del.onclick = () => { entities.splice(i, 1); if (!entities.length) addEntity(); renderEntities(); };
+    head.appendChild(del);
+    card.appendChild(head);
+
+    if (e.mode === "states") {
+      e.states.forEach((st, j) => {
+        const row = document.createElement("div");
+        row.className = "state-row";
+        row.appendChild(inp(st.k, "состояние (on)", v => st.k = v));
+        row.appendChild(inp(st.v, "текст уведомления (🚪 Дверь открыта)", v => st.v = v));
+        const rm = document.createElement("button");
+        rm.className = "small";
+        rm.textContent = "×";
+        rm.title = "убрать состояние";
+        rm.onclick = () => { e.states.splice(j, 1); renderEntities(); };
+        row.appendChild(rm);
+        card.appendChild(row);
+      });
+      const add = document.createElement("button");
+      add.className = "small";
+      add.style.marginTop = "8px";
+      add.textContent = "+ состояние";
+      add.onclick = () => { e.states.push({ k: "", v: "" }); renderEntities(); };
+      card.appendChild(add);
+    } else {
+      const t = field("Шаблон текста", e.template, "Сейчас {state} °C", v => e.template = v);
+      t.style.marginTop = "6px";
+      card.appendChild(t);
+    }
+    box.appendChild(card);
+  });
+}
+
+// field: подписанное текстовое поле; inp: поле без подписи (для пар состояний).
+function field(labelText, value, placeholder, onInput) {
+  const wrap = document.createElement("div");
+  wrap.className = "grow";
+  const l = document.createElement("label");
+  l.textContent = labelText;
+  wrap.appendChild(l);
+  wrap.appendChild(inp(value, placeholder, onInput));
+  return wrap;
+}
+function inp(value, placeholder, onInput) {
+  const i = document.createElement("input");
+  i.type = "text";
+  i.value = value;
+  i.placeholder = placeholder;
+  i.oninput = () => onInput(i.value.trim());
+  return i;
+}
+
+// --- Сохранение ------------------------------------------------------------
+function collectConfig() {
+  return {
+    homeassistant: {
+      url: $("ha-url").value.trim(),
+      token_env: passthrough.token_env || undefined,
+    },
+    entities: entities.map(e => {
+      const out = { id: e.id, name: e.name };
+      if (e.mode === "template") {
+        out.template = e.template;
+      } else {
+        out.states = {};
+        e.states.filter(s => s.k !== "").forEach(s => { out.states[s.k] = s.v; });
+      }
+      return out;
+    }),
+    notifications: {
+      min_interval_sec: parseInt($("min-interval").value, 10) || 0,
+      on_disconnect: $("on-disconnect").checked,
+    },
+    logging: {
+      level: $("log-level").value,
+      file: passthrough.log_file || undefined,
+    },
+  };
+}
+
+async function save() {
+  try {
+    const res = await api("PUT", "/api/config", collectConfig());
+    toast(res.result || "Сохранено");
+    refreshStatus();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function saveToken() {
+  const token = $("ha-token").value.trim();
+  if (!token) { toast("Вставьте токен в поле", true); return; }
+  try {
+    const res = await api("POST", "/api/token", { token });
+    $("ha-token").value = "";
+    toast(res.result || "Токен сохранён");
+    refreshStatus();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// --- Инициализация -----------------------------------------------------------
+$("save").onclick = save;
+$("save-token").onclick = saveToken;
+$("add-entity").onclick = () => { addEntity(); renderEntities(); };
+$("check-conn").onclick = refreshStatus;
+$("test-notify").onclick = async () => {
+  try { toast((await api("POST", "/api/test")).result); }
+  catch (e) { toast(e.message, true); }
+};
+
+// Токен из ссылки уже переехал в cookie — убираем его из адресной строки.
+if (location.search.includes("auth=")) {
+  history.replaceState(null, "", location.pathname);
+}
+
+refreshStatus();
+setInterval(refreshStatus, 3000);
+loadConfig().catch(e => toast("Не удалось загрузить конфигурацию: " + e.message, true));
+</script>
+</body>
+</html>
