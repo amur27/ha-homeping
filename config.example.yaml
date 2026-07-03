@@ -1,7 +1,7 @@
-# Пример конфигурации агента ha-notify-agent.
+# Пример конфигурации агента homecrier.
 # Логика файла: образец для копирования в стандартный каталог настроек ОС
-# (Windows: %APPDATA%\ha-notify-agent\config.yaml,
-#  macOS: ~/Library/Application Support/ha-notify-agent/config.yaml).
+# (Windows: %APPDATA%\homecrier\config.yaml,
+#  macOS: ~/Library/Application Support/homecrier/config.yaml).
 # Токен в этом файле НЕ хранится — только имя переменной окружения.
 # Полное описание формата — docs/spec.md, раздел 3.
 

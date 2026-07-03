@@ -11,14 +11,14 @@ import (
 )
 
 // appDirName — имя каталога агента внутри стандартного каталога настроек ОС.
-const appDirName = "ha-notify-agent"
+const appDirName = "homecrier"
 
 // configFileName — имя файла конфигурации внутри каталога агента.
 const configFileName = "config.yaml"
 
 // DefaultPath возвращает путь к конфигу по умолчанию для текущей ОС:
-//   - Windows: %APPDATA%\ha-notify-agent\config.yaml
-//   - macOS:   ~/Library/Application Support/ha-notify-agent/config.yaml
+//   - Windows: %APPDATA%\homecrier\config.yaml
+//   - macOS:   ~/Library/Application Support/homecrier/config.yaml
 //
 // Оба варианта покрываются os.UserConfigDir, что гарантирует единообразие
 // с разделом 2 спецификации без платформенных ветвлений.

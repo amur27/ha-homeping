@@ -2,15 +2,15 @@
 
 # Установка агента на Windows 11 и macOS
 
-Предполагается, что бинарники собраны по task-06 (`ha-notify-agent.exe` для Windows, `ha-notify-agent` для macOS/arm64).
+Предполагается, что бинарники собраны по task-06 (`homecrier.exe` для Windows, `homecrier` для macOS/arm64).
 
 ## Windows 11
 
 ### 1. Разместить файлы
 
 ```
-C:\Program Files\ha-notify-agent\ha-notify-agent.exe
-%APPDATA%\ha-notify-agent\config.yaml
+C:\Program Files\homecrier\homecrier.exe
+%APPDATA%\homecrier\config.yaml
 ```
 
 Конфиг — по образцу из [spec.md](spec.md), раздел 3.1.
@@ -28,8 +28,8 @@ PowerShell (от имени текущего пользователя):
 Открыть новый терминал (чтобы подхватилась переменная):
 
 ```powershell
-& "C:\Program Files\ha-notify-agent\ha-notify-agent.exe" -test   # должен появиться тост
-& "C:\Program Files\ha-notify-agent\ha-notify-agent.exe"          # рабочий запуск, смотреть лог
+& "C:\Program Files\homecrier\homecrier.exe" -test   # должен появиться тост
+& "C:\Program Files\homecrier\homecrier.exe"          # рабочий запуск, смотреть лог
 ```
 
 Открыть/закрыть дверь — уведомление должно прийти в течение секунды.
@@ -37,12 +37,12 @@ PowerShell (от имени текущего пользователя):
 ### 4. Автозапуск через планировщик задач
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "C:\Program Files\ha-notify-agent\ha-notify-agent.exe"
+$action  = New-ScheduledTaskAction -Execute "C:\Program Files\homecrier\homecrier.exe"
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-Register-ScheduledTask -TaskName "ha-notify-agent" -Action $action -Trigger $trigger -Settings $settings
-Start-ScheduledTask -TaskName "ha-notify-agent"
+Register-ScheduledTask -TaskName "homecrier" -Action $action -Trigger $trigger -Settings $settings
+Start-ScheduledTask -TaskName "homecrier"
 ```
 
 Задача перезапускает агента при падении и не имеет лимита времени выполнения.
@@ -52,28 +52,28 @@ Start-ScheduledTask -TaskName "ha-notify-agent"
 ### 1. Разместить файлы
 
 ```
-/usr/local/bin/ha-notify-agent
-~/Library/Application Support/ha-notify-agent/config.yaml
+/usr/local/bin/homecrier
+~/Library/Application Support/homecrier/config.yaml
 ```
 
 Снять карантин Gatekeeper с бинарника, скопированного по сети:
 
 ```bash
-xattr -d com.apple.quarantine /usr/local/bin/ha-notify-agent
-chmod +x /usr/local/bin/ha-notify-agent
+xattr -d com.apple.quarantine /usr/local/bin/homecrier
+chmod +x /usr/local/bin/homecrier
 ```
 
 ### 2. Проверка вручную
 
 ```bash
-HA_TOKEN="<токен notify-agent-macbook>" ha-notify-agent -test
+HA_TOKEN="<токен notify-agent-macbook>" homecrier -test
 ```
 
 При первом уведомлении macOS может спросить разрешение: System Settings → Notifications → разрешить для терминала/агента.
 
 ### 3. Автозапуск через launchd
 
-Создать `~/Library/LaunchAgents/local.ha-notify-agent.plist`:
+Создать `~/Library/LaunchAgents/local.homecrier.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -81,15 +81,15 @@ HA_TOKEN="<токен notify-agent-macbook>" ha-notify-agent -test
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key><string>local.ha-notify-agent</string>
+    <key>Label</key><string>local.homecrier</string>
     <key>ProgramArguments</key>
-    <array><string>/usr/local/bin/ha-notify-agent</string></array>
+    <array><string>/usr/local/bin/homecrier</string></array>
     <key>EnvironmentVariables</key>
     <dict><key>HA_TOKEN</key><string>ВСТАВИТЬ_ТОКЕН</string></dict>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>/tmp/ha-notify-agent.log</string>
-    <key>StandardErrorPath</key><string>/tmp/ha-notify-agent.err</string>
+    <key>StandardOutPath</key><string>/tmp/homecrier.log</string>
+    <key>StandardErrorPath</key><string>/tmp/homecrier.err</string>
 </dict>
 </plist>
 ```
@@ -97,8 +97,8 @@ HA_TOKEN="<токен notify-agent-macbook>" ha-notify-agent -test
 Файл содержит токен — ограничить права и загрузить:
 
 ```bash
-chmod 600 ~/Library/LaunchAgents/local.ha-notify-agent.plist
-launchctl load ~/Library/LaunchAgents/local.ha-notify-agent.plist
+chmod 600 ~/Library/LaunchAgents/local.homecrier.plist
+launchctl load ~/Library/LaunchAgents/local.homecrier.plist
 ```
 
 `KeepAlive` перезапускает агента при падении; после сна ноутбука соединение восстановит встроенный бэкофф агента.

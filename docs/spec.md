@@ -1,6 +1,6 @@
-<!-- Этот документ — функциональная спецификация агента ha-notify-agent: формат конфигурации, протокол работы с HA, поведение уведомлений, логирование и коды выхода. Спецификация первична для всех задач в docs/tasks/. -->
+<!-- Этот документ — функциональная спецификация агента homecrier: формат конфигурации, протокол работы с HA, поведение уведомлений, логирование и коды выхода. Спецификация первична для всех задач в docs/tasks/. -->
 
-# Функциональная спецификация ha-notify-agent (v1)
+# Функциональная спецификация homecrier (v1)
 
 ## 1. Назначение
 
@@ -9,12 +9,12 @@
 ## 2. Запуск и параметры командной строки
 
 ```
-ha-notify-agent [-config <путь>] [-test] [-version]
+homecrier [-config <путь>] [-test] [-version]
 ```
 
 - `-config` — путь к YAML-конфигу. По умолчанию:
-  - Windows: `%APPDATA%\ha-notify-agent\config.yaml`
-  - macOS: `~/Library/Application Support/ha-notify-agent/config.yaml`
+  - Windows: `%APPDATA%\homecrier\config.yaml`
+  - macOS: `~/Library/Application Support/homecrier/config.yaml`
 - `-test` — показать пробное уведомление «Агент работает» и выйти (проверка разрешений ОС).
 - `-version` — вывести версию и выйти.
 

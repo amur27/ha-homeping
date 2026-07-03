@@ -12,16 +12,16 @@ cd "$(dirname "$0")/.."
 version="$(git describe --tags --always 2>/dev/null || echo unknown)"
 ldflags="-s -w -X main.version=${version}"
 
-echo "Сборка ha-notify-agent версии ${version}"
+echo "Сборка homecrier версии ${version}"
 
 export CGO_ENABLED=0
 
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${ldflags}" \
-    -o dist/ha-notify-agent.exe ./cmd/agent
-echo "  dist/ha-notify-agent.exe (windows/amd64)"
+    -o dist/homecrier.exe ./cmd/agent
+echo "  dist/homecrier.exe (windows/amd64)"
 
 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "${ldflags}" \
-    -o dist/ha-notify-agent-darwin-arm64 ./cmd/agent
-echo "  dist/ha-notify-agent-darwin-arm64 (darwin/arm64)"
+    -o dist/homecrier-darwin-arm64 ./cmd/agent
+echo "  dist/homecrier-darwin-arm64 (darwin/arm64)"
 
 echo "Готово. Развёртывание — docs/setup-clients.md"

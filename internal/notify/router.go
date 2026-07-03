@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"ha-notify-agent/internal/config"
+	"homecrier/internal/config"
 )
 
 // message — готовое к показу уведомление.

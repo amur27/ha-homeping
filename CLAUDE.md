@@ -4,7 +4,7 @@
 
 ## О проекте
 
-Кросс-платформенный агент `ha-notify-agent` на Go: подключается к WebSocket API Home Assistant и показывает нативные системные уведомления на Windows 11 и macOS при смене состояния датчиков. Полная архитектура — в `docs/architecture.md`, спецификация — в `docs/spec.md`.
+Кросс-платформенный агент `homecrier` на Go: подключается к WebSocket API Home Assistant и показывает нативные системные уведомления на Windows 11 и macOS при смене состояния датчиков. Полная архитектура — в `docs/architecture.md`, спецификация — в `docs/spec.md`.
 
 ## Обязательные правила
 
@@ -15,7 +15,7 @@
 
 ## Технологический стек (зафиксирован в ADR, не менять без нового ADR)
 
-- Go ≥ 1.22, модуль `ha-notify-agent`.
+- Go ≥ 1.22, модуль `homecrier`.
 - WebSocket: `github.com/coder/websocket`.
 - Уведомления: `github.com/gen2brain/beeep` (базовый уровень для обеих ОС).
 - Конфиг: YAML (`gopkg.in/yaml.v3`).

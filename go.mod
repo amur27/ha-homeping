@@ -1,4 +1,4 @@
-module ha-notify-agent
+module homecrier
 
 go 1.26.3
 

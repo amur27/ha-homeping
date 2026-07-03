@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"ha-notify-agent/internal/config"
+	"homecrier/internal/config"
 )
 
 // fakeNotifier потокобезопасно записывает все показанные уведомления.

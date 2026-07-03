@@ -20,9 +20,9 @@
    $ldflags = "-s -w -X main.version=$version"
    $env:CGO_ENABLED = "0"
    $env:GOOS = "windows"; $env:GOARCH = "amd64"
-   go build -ldflags $ldflags -o dist/ha-notify-agent.exe ./cmd/agent
+   go build -ldflags $ldflags -o dist/homecrier.exe ./cmd/agent
    $env:GOOS = "darwin"; $env:GOARCH = "arm64"
-   go build -ldflags $ldflags -o dist/ha-notify-agent-darwin-arm64 ./cmd/agent
+   go build -ldflags $ldflags -o dist/homecrier-darwin-arm64 ./cmd/agent
    ```
    Плюс аналог `scripts/build.sh` для сборки с macOS/Linux.
 2. Убедиться, что beeep собирается с `CGO_ENABLED=0` под обе платформы; если для macOS потребуется cgo — зафиксировать это в скрипте и в README отдельным примечанием (сборка darwin-бинарника тогда выполняется на MacBook).
@@ -33,7 +33,7 @@
 ## Критерии приёмки
 
 - [ ] `scripts/build.ps1` создаёт оба бинарника в `dist/` без ошибок.
-- [ ] `ha-notify-agent.exe -version` печатает версию, совпадающую с git describe.
+- [ ] `homecrier.exe -version` печатает версию, совпадающую с git describe.
 - [ ] Windows-бинарник проходит `-test` и полный сценарий на ПК.
 - [ ] macOS-бинарник запускается на MacBook (после `xattr -d com.apple.quarantine`) и проходит `-test`.
 - [ ] Сквозной сценарий приёмки из оглавления задач пройден полностью на обеих машинах.

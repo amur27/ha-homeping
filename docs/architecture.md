@@ -16,11 +16,11 @@ flowchart LR
     end
 
     subgraph Win["ПК Windows 11"]
-        AW["ha-notify-agent\n(автозапуск: Task Scheduler)"] --> TW["Toast-уведомление\nWindows"]
+        AW["homecrier\n(автозапуск: Task Scheduler)"] --> TW["Toast-уведомление\nWindows"]
     end
 
     subgraph Mac["MacBook"]
-        AM["ha-notify-agent\n(автозапуск: launchd)"] --> TM["Уведомление\nmacOS Notification Center"]
+        AM["homecrier\n(автозапуск: launchd)"] --> TM["Уведомление\nmacOS Notification Center"]
     end
 
     HA -- "WebSocket API\nws://…:8123/api/websocket\n(long-lived token)" --> AW
@@ -35,7 +35,7 @@ flowchart LR
 - Используется штатный **WebSocket API** (`/api/websocket`) — он всегда включён.
 - Единственная подготовка: создать **long-lived access token** для каждого клиента (см. `setup-home-assistant.md`). Отдельный токен на устройство — чтобы отзыв одного не ломал другое.
 
-### 3.2. ha-notify-agent (разрабатываемый компонент)
+### 3.2. homecrier (разрабатываемый компонент)
 
 Один и тот же Go-бинарник для обеих ОС (кросс-компиляция). Внутренние пакеты:
 

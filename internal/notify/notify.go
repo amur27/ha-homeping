@@ -13,6 +13,12 @@ import (
 	"github.com/gen2brain/beeep"
 )
 
+// Имя приложения для системных механизмов уведомлений
+// (на Windows отображается как отправитель тоста).
+func init() {
+	beeep.AppName = "HomeCrier"
+}
+
 // Notifier — показ одного нативного уведомления ОС.
 type Notifier interface {
 	Show(title, body string) error
