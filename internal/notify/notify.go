@@ -6,7 +6,12 @@
 // без изменения остального кода (см. ADR-002).
 package notify
 
-import "github.com/gen2brain/beeep"
+import (
+	"log/slog"
+	"strings"
+
+	"github.com/gen2brain/beeep"
+)
 
 // Notifier — показ одного нативного уведомления ОС.
 type Notifier interface {
@@ -20,5 +25,23 @@ type Beeep struct{}
 // (beeep сам выбирает системный механизм для текущей ОС;
 // nil в качестве иконки beeep v0.11 не принимает).
 func (Beeep) Show(title, body string) error {
-	return beeep.Notify(title, body, "")
+	err := beeep.Notify(title, body, "")
+	if err != nil && shownViaFallback(err) {
+		slog.Debug("уведомление показано запасным путём (PowerShell), ошибка нативного пути подавлена",
+			"error", err)
+		return nil
+	}
+	return err
+}
+
+// shownViaFallback распознаёт особенность go-toast на Windows: нативный показ
+// через WinRT падает на символах вне базовой юникод-плоскости (эмодзи) с ошибкой
+// doc.LoadXml, библиотека показывает уведомление запасным путём через PowerShell,
+// но возвращает ошибку нативного пути даже при успехе фолбэка
+// (bind.go: errors.Join(err, pushPowershell(xml))). Если фолбэк тоже упал,
+// в объединённой цепочке появляется его ошибка со словом "powershell" —
+// тогда неудача настоящая и подавлять её нельзя.
+func shownViaFallback(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "doc.LoadXml") && !strings.Contains(msg, "powershell")
 }
