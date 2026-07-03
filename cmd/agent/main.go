@@ -1,9 +1,11 @@
 // Точка входа агента homeping.
 // Логика модуля: разбор флагов командной строки (-config, -test, -version,
-// -no-tray), настройка логирования (файл с ротацией + stderr, уровень меняется
-// при hot-reload), запуск супервизора internal/agent и graceful shutdown
-// по сигналам ОС. До появления трея (task-08) агент всегда работает
-// в headless-режиме FailFast: коды выхода 2/3 как в v1 (docs/spec.md, раздел 12).
+// -no-tray), настройка логирования (файл с ротацией + stderr), запуск
+// супервизора internal/agent и graceful shutdown по сигналам ОС.
+// По умолчанию агент живёт в трее: systray занимает главную горутину
+// (требование macOS), супервизор работает в фоне, ошибки конфига/токена
+// не фатальны — агент ждёт исправления настроек. Флаг -no-tray включает
+// headless-режим v1 с кодами выхода 2/3 (docs/spec.md, разделы 2 и 12).
 package main
 
 import (
@@ -21,6 +23,7 @@ import (
 	"homeping/internal/hass"
 	"homeping/internal/logging"
 	"homeping/internal/notify"
+	"homeping/internal/tray"
 )
 
 // version зашивается при сборке релиза через ldflags (см. scripts/build.ps1).
@@ -37,11 +40,8 @@ func run() int {
 	configPath := flag.String("config", "", "путь к YAML-файлу конфигурации (по умолчанию — стандартный каталог настроек ОС)")
 	testMode := flag.Bool("test", false, "показать пробное уведомление и выйти")
 	showVersion := flag.Bool("version", false, "вывести версию и выйти")
-	// Флаг заведён по спецификации v2; до реализации трея (task-08)
-	// агент работает headless независимо от его значения.
 	noTray := flag.Bool("no-tray", false, "headless-режим: без иконки в трее и веб-интерфейса")
 	flag.Parse()
-	_ = noTray
 
 	if *showVersion {
 		fmt.Println(version)
@@ -70,57 +70,85 @@ func run() int {
 	}
 
 	// Первичная загрузка конфига — ради настроек логирования; дальше конфиг
-	// живёт внутри супервизора (hot-reload). Ошибка — код 2 (headless-режим).
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", err)
+	// живёт внутри супервизора (hot-reload). В headless-режиме ошибка
+	// фатальна (код 2), в трей-режиме агент запускается и ждёт исправления.
+	cfg, cfgErr := config.Load(*configPath)
+	if cfgErr != nil && *noTray {
+		fmt.Fprintf(os.Stderr, "ошибка конфигурации: %v\n", cfgErr)
 		return 2
 	}
 	setupLogging(cfg)
+	if cfgErr != nil {
+		slog.Warn("конфигурация не загружена, агент ждёт настройки", "error", cfgErr)
+	}
 
-	// Контекст отменяется по Ctrl+C (SIGINT) или SIGTERM — все подсистемы
-	// агента обязаны завершаться по его отмене.
+	// Контекст отменяется по Ctrl+C (SIGINT), SIGTERM или из меню трея —
+	// все подсистемы агента обязаны завершаться по его отмене.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	slog.Info("агент запускается",
-		"version", version,
-		"config", *configPath,
-		"ha_url", cfg.HomeAssistant.URL,
-		"entities", len(cfg.Entities))
 
 	a := &agent.Agent{
 		ConfigPath: *configPath,
 		Notifier:   notify.Beeep{},
-		// До task-08 трея нет — ошибки конфигурации и токена фатальны, как в v1.
-		FailFast: true,
+		FailFast:   *noTray,
 		// При hot-reload применяется новый уровень логирования.
 		OnConfig: func(c *config.Config) { logging.SetLevel(c.SlogLevel()) },
 	}
 
-	// Фатальные ошибки логируются через slog: он пишет и в stderr,
-	// и в файл логов — единственный след при запуске без консоли.
-	if err := a.Run(ctx); err != nil {
-		switch {
-		case errors.Is(err, hass.ErrAuthInvalid):
-			slog.Error("ошибка аутентификации", "error", err)
-			return 3
-		case errors.Is(err, agent.ErrConfig):
-			slog.Error("агент не запущен", "error", err)
-			return 2
-		default:
-			slog.Error("агент завершился с ошибкой", "error", err)
-			return 1
-		}
+	slog.Info("агент запускается",
+		"version", version, "config", *configPath, "tray", !*noTray)
+
+	if *noTray {
+		return exitCode(a.Run(ctx))
 	}
-	return 0
+
+	// Трей-режим: systray блокирует главную горутину, агент — в фоне.
+	// Остановка с любой стороны сходится в одну точку: отмена ctx →
+	// супервизор завершается → цикл трея закрывается.
+	done := make(chan error, 1)
+	go func() {
+		done <- a.Run(ctx)
+		tray.Quit()
+	}()
+	tray.Run(tray.Options{
+		Agent:       a,
+		Version:     version,
+		ConfigPath:  *configPath,
+		RequestExit: stop,
+	})
+	return exitCode(<-done)
+}
+
+// exitCode отображает ошибку супервизора в код выхода процесса.
+// Фатальные ошибки логируются через slog: он пишет и в stderr,
+// и в файл логов — единственный след при запуске без консоли.
+func exitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, hass.ErrAuthInvalid):
+		slog.Error("ошибка аутентификации", "error", err)
+		return 3
+	case errors.Is(err, agent.ErrConfig):
+		slog.Error("агент не запущен", "error", err)
+		return 2
+	default:
+		slog.Error("агент завершился с ошибкой", "error", err)
+		return 1
+	}
 }
 
 // setupLogging настраивает глобальный slog: файл с ротацией + stderr
-// (docs/spec.md, раздел 11). Недоступность файла логов не фатальна —
-// агент важнее журнала, остаётся вывод в stderr.
+// (docs/spec.md, раздел 11). Вызывается и при невалидном конфиге (nil) —
+// тогда уровень info и путь по умолчанию. Недоступность файла логов
+// не фатальна — агент важнее журнала, остаётся вывод в stderr.
 func setupLogging(cfg *config.Config) {
-	logPath := cfg.Logging.File
+	level := slog.LevelInfo
+	logPath := ""
+	if cfg != nil {
+		level = cfg.SlogLevel()
+		logPath = cfg.Logging.File
+	}
 	if logPath == "" {
 		p, err := logging.DefaultPath()
 		if err != nil {
@@ -128,5 +156,5 @@ func setupLogging(cfg *config.Config) {
 		}
 		logPath = p
 	}
-	logging.Setup(cfg.SlogLevel(), logPath)
+	logging.Setup(level, logPath)
 }

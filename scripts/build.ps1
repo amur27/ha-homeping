@@ -1,7 +1,10 @@
-﻿# Скрипт сборки релизных бинарников (запуск с Windows).
-# Логика файла: кросс-компиляция агента под Windows (amd64) и macOS (arm64)
-# без cgo, с зашивкой версии из git describe через ldflags и урезанием
-# отладочной информации (-s -w). Результат — в каталоге dist/.
+# Скрипт сборки релизного бинарника Windows (запуск с Windows).
+# Логика файла: сборка агента под Windows (amd64) с зашивкой версии из
+# git describe, урезанием отладочной информации (-s -w) и GUI-подсистемой
+# (-H=windowsgui — без консольного окна: агент живёт в трее, логи в файле).
+# Darwin-бинарник с v2 здесь НЕ собирается: трей (fyne.io/systray) требует
+# cgo на macOS, кросс-компиляция с Windows невозможна — сборка на MacBook
+# (scripts/build.sh) или в GitHub Actions (task-10).
 
 $ErrorActionPreference = "Stop"
 
@@ -10,25 +13,22 @@ Set-Location (Join-Path $PSScriptRoot "..")
 
 $version = git describe --tags --always
 if (-not $version) { $version = "unknown" }
-$ldflags = "-s -w -X main.version=$version"
+# -H=windowsgui: GUI-подсистема — при запуске не открывается консоль.
+# Следствие: вывод -version/-test из консоли не виден; для отладки
+# использовать dev-сборку (go build ./cmd/agent) или файл логов.
+$ldflags = "-s -w -H=windowsgui -X main.version=$version"
 
 Write-Host "Сборка homeping версии $version"
 
+# Windows amd64 (на Windows cgo для systray не нужен).
 $env:CGO_ENABLED = "0"
-
-# Windows amd64
 $env:GOOS = "windows"; $env:GOARCH = "amd64"
 go build -trimpath -ldflags $ldflags -o dist/homeping.exe ./cmd/agent
 if ($LASTEXITCODE -ne 0) { throw "сборка windows/amd64 не удалась" }
-Write-Host "  dist/homeping.exe (windows/amd64)"
-
-# macOS arm64 (Apple Silicon)
-$env:GOOS = "darwin"; $env:GOARCH = "arm64"
-go build -trimpath -ldflags $ldflags -o dist/homeping-darwin-arm64 ./cmd/agent
-if ($LASTEXITCODE -ne 0) { throw "сборка darwin/arm64 не удалась" }
-Write-Host "  dist/homeping-darwin-arm64 (darwin/arm64)"
+Write-Host "  dist/homeping.exe (windows/amd64, GUI-подсистема)"
 
 # Сбросить переменные, чтобы не влиять на последующие команды в той же сессии.
 Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
 
-Write-Host "Готово. Развёртывание — docs/setup-clients.md"
+Write-Host "Готово. macOS собирается на MacBook: scripts/build.sh (см. task-10)."
+Write-Host "Развёртывание — docs/setup-clients.md"

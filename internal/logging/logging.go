@@ -44,19 +44,41 @@ func DefaultPath() (string, error) {
 	return filepath.Join(base, "homeping", "homeping.log"), nil
 }
 
-// Setup настраивает глобальный slog: текстовый вывод в stderr и в файл
-// с ротацией. Пустой filePath допустим — тогда пишем только в stderr
+// Setup настраивает глобальный slog: текстовый вывод в файл с ротацией
+// и в stderr. Пустой filePath допустим — тогда пишем только в stderr
 // (файл недоступен — не повод не запускаться: уведомления важнее логов).
 func Setup(lvl slog.Level, filePath string) {
 	level.Set(lvl)
 
 	var w io.Writer = os.Stderr
 	if filePath != "" {
-		// stderr первым: консольный вывод сохраняется, даже если файл откажет.
-		w = io.MultiWriter(os.Stderr, &rotatingWriter{path: filePath, maxSize: maxFileSize})
+		// Не io.MultiWriter: он прекращает запись на первом же сбое,
+		// а у GUI-процесса Windows (-H=windowsgui) stderr невалиден —
+		// файл не получил бы ни строки. teeWriter пишет best-effort в оба.
+		w = &teeWriter{
+			file:   &rotatingWriter{path: filePath, maxSize: maxFileSize},
+			stderr: os.Stderr,
+		}
 	}
 	handler := slog.NewTextHandler(w, &slog.HandlerOptions{Level: &level})
 	slog.SetDefault(slog.New(handler))
+}
+
+// teeWriter дублирует записи в файл и stderr; сбой одного приёмника
+// не мешает другому (без консоли живёт файл, без файла — консоль).
+type teeWriter struct {
+	file   io.Writer
+	stderr io.Writer
+}
+
+// Write считается успешной, если запись принял хотя бы один приёмник.
+func (t *teeWriter) Write(p []byte) (int, error) {
+	_, errFile := t.file.Write(p)
+	_, errStderr := t.stderr.Write(p)
+	if errFile != nil && errStderr != nil {
+		return 0, errFile
+	}
+	return len(p), nil
 }
 
 // SetLevel меняет уровень логирования на лету (hot-reload конфига).
