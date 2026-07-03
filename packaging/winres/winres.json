@@ -1,0 +1,39 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": ["icon.png"]
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": {
+          "name": "HomePing",
+          "version": "1.0.0.0"
+        },
+        "description": "Уведомления Home Assistant на рабочем столе",
+        "execution-level": "asInvoker"
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "0.0.0.0",
+          "product_version": "0.0.0.0"
+        },
+        "info": {
+          "0419": {
+            "ProductName": "HomePing",
+            "FileDescription": "Уведомления Home Assistant на рабочем столе",
+            "CompanyName": "amur27",
+            "LegalCopyright": "MIT",
+            "OriginalFilename": "homeping.exe",
+            "InternalName": "homeping"
+          }
+        }
+      }
+    }
+  }
+}

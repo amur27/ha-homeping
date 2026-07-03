@@ -20,6 +20,18 @@ $ldflags = "-s -w -H=windowsgui -X main.version=$version"
 
 Write-Host "Сборка homeping версии $version"
 
+# Ресурсы exe (иконка, метаданные): go-winres генерирует .syso рядом
+# с main-пакетом — go build подхватывает его автоматически.
+# Числовая версия ресурсов берётся из git-тега (v1.2.3 -> 1.2.3.0).
+$numVersion = "0.0.0.0"
+if ($version -match "^v(\d+)\.(\d+)\.(\d+)") {
+    $numVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
+}
+go run github.com/tc-hib/go-winres@v0.3.3 make `
+    --in packaging/winres/winres.json --out cmd/agent/rsrc `
+    --file-version $numVersion --product-version $numVersion
+if ($LASTEXITCODE -ne 0) { throw "генерация ресурсов Windows (go-winres) не удалась" }
+
 # Windows amd64 (на Windows cgo для systray не нужен).
 $env:CGO_ENABLED = "0"
 $env:GOOS = "windows"; $env:GOARCH = "amd64"

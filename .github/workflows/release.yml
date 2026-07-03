@@ -1,0 +1,77 @@
+# Сборка релиза homeping (task-10).
+# Логика файла: по пушу тега v* (или вручную через workflow_dispatch —
+# для проверки сборки без выпуска) прогоняются тесты и собираются
+# дистрибутивы: Windows-exe (иконка + GUI-подсистема) на windows-раннере
+# и HomePing.app (cgo для systray, поэтому только macOS-раннер) в zip.
+# При сборке по тегу артефакты прикладываются к GitHub Release.
+# Подписи кода нет: на macOS после распаковки нужен xattr -dr
+# com.apple.quarantine (см. docs/setup-clients.md).
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Полная история и теги — git describe зашивает версию.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Тесты
+        run: go test ./...
+
+      - name: Сборка exe (иконка, windowsgui, версия из git)
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homeping-windows-amd64
+          path: dist/homeping.exe
+
+      - name: Приложить к релизу
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/homeping.exe
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Тесты (с cgo — как в релизной сборке)
+        run: go test ./...
+
+      - name: Упаковка HomePing.app
+        run: bash scripts/package-macos.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homeping-macos-arm64
+          path: dist/homeping-macos-arm64.zip
+
+      - name: Приложить к релизу
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/homeping-macos-arm64.zip

@@ -1,8 +1,12 @@
-// Генератор иконок трея для internal/tray/assets.
+// Генератор иконок трея и приложения.
 // Логика модуля: рисует пиктограмму «домик» с бейджем статуса в четырёх
 // вариантах (docs/spec.md, раздел 7.1) и сохраняет каждый как .ico
 // (Windows: 16 и 32 px, 32-битный BGRA с альфой, без PNG-сжатия — максимально
-// совместимый формат для LoadImage) и .png (macOS/прочие ОС, 32 px).
+// совместимый формат для LoadImage) и .png (macOS/прочие ОС, 32 px)
+// в internal/tray/assets. Дополнительно генерирует иконку приложения
+// (белый домик на зелёной скруглённой подложке) для упаковки (task-10):
+// packaging/winres/icon.png (256, go-winres сам строит все размеры .ico)
+// и packaging/macos/icon.icns (256+512, PNG-контейнеры ic08/ic09).
 // Запуск из корня репозитория: go run ./scripts/genicons
 package main
 
@@ -69,6 +73,126 @@ func main() {
 		}
 		fmt.Printf("иконка %s: .ico (16+32) и .png (32)\n", v.name)
 	}
+
+	writeAppIcons()
+}
+
+// writeAppIcons генерирует иконку приложения для упаковки:
+// PNG 256 для ресурсов Windows-exe и .icns (256+512) для .app-бандла.
+func writeAppIcons() {
+	winresDir := filepath.Join("packaging", "winres")
+	macosDir := filepath.Join("packaging", "macos")
+	for _, d := range []string{winresDir, macosDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			fail(err)
+		}
+	}
+
+	app256 := renderApp(256)
+	app512 := renderApp(512)
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, app256); err != nil {
+		fail(err)
+	}
+	if err := os.WriteFile(filepath.Join(winresDir, "icon.png"), buf.Bytes(), 0o644); err != nil {
+		fail(err)
+	}
+	fmt.Println("иконка приложения: packaging/winres/icon.png (256)")
+
+	icns, err := encodeICNS(app256, app512)
+	if err != nil {
+		fail(err)
+	}
+	if err := os.WriteFile(filepath.Join(macosDir, "icon.icns"), icns, 0o644); err != nil {
+		fail(err)
+	}
+	fmt.Println("иконка приложения: packaging/macos/icon.icns (256+512)")
+}
+
+// renderApp рисует иконку приложения: белый домик на зелёной
+// скруглённой подложке (читается на любом фоне Finder/проводника).
+func renderApp(size int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, size, size))
+	f := float64(size) / 32.0
+	bg := colConnected
+	radius := 6.0 // радиус скругления в сетке 32×32
+
+	for py := 0; py < size; py++ {
+		for px := 0; px < size; px++ {
+			x := (float64(px) + 0.5) / f
+			y := (float64(py) + 0.5) / f
+
+			// Скруглённый квадрат-подложка на всю площадь.
+			if inRoundedRect(x, y, 1, 1, 31, 31, radius) {
+				img.SetNRGBA(px, py, bg)
+			}
+			// Домик — той же геометрией, что в трее, но белый.
+			inBody := x >= 8 && x < 24 && y >= 15 && y < 27
+			halfRoof := (y - 5) * 12.0 / 10.0
+			inRoof := y >= 5 && y < 15 && x >= 16-halfRoof && x <= 16+halfRoof
+			if inBody || inRoof {
+				img.SetNRGBA(px, py, colGlyph)
+			}
+		}
+	}
+	return img
+}
+
+// inRoundedRect проверяет попадание точки в прямоугольник со скруглёнными углами.
+func inRoundedRect(x, y, x0, y0, x1, y1, r float64) bool {
+	if x < x0 || x > x1 || y < y0 || y > y1 {
+		return false
+	}
+	// Внутри «креста» — точно попали; остаются только угловые квадраты.
+	cx := clamp(x, x0+r, x1-r)
+	cy := clamp(y, y0+r, y1-r)
+	dx, dy := x-cx, y-cy
+	return dx*dx+dy*dy <= r*r
+}
+
+// clamp ограничивает значение отрезком [lo, hi].
+func clamp(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// encodeICNS упаковывает PNG-кадры в контейнер .icns: заголовок «icns»
+// и записи ic08 (256 px) / ic09 (512 px) — современные macOS читают
+// PNG внутри icns, отдельные утилиты Apple не требуются.
+func encodeICNS(img256, img512 *image.NRGBA) ([]byte, error) {
+	entry := func(kind string, img *image.NRGBA) ([]byte, error) {
+		var png_ bytes.Buffer
+		if err := png.Encode(&png_, img); err != nil {
+			return nil, err
+		}
+		var buf bytes.Buffer
+		buf.WriteString(kind)
+		binary.Write(&buf, binary.BigEndian, uint32(8+png_.Len()))
+		buf.Write(png_.Bytes())
+		return buf.Bytes(), nil
+	}
+
+	e256, err := entry("ic08", img256)
+	if err != nil {
+		return nil, err
+	}
+	e512, err := entry("ic09", img512)
+	if err != nil {
+		return nil, err
+	}
+
+	var out bytes.Buffer
+	out.WriteString("icns")
+	binary.Write(&out, binary.BigEndian, uint32(8+len(e256)+len(e512)))
+	out.Write(e256)
+	out.Write(e512)
+	return out.Bytes(), nil
 }
 
 // fail печатает ошибку и завершает генератор.
