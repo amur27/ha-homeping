@@ -1,56 +1,70 @@
-<!-- Этот файл — точка входа в проект: краткое описание решения, карта документации и порядок работы с ней. -->
+<!-- Этот файл — основная (английская) точка входа в проект: краткое описание решения, карта документации и порядок работы. Русская версия — README.ru.md. -->
+
+**English** | [Русский](README.ru.md)
 
 # HomePing
 
-**HomePing** — твой дом «пингует» тебя: доставка статусов датчиков Home Assistant (Raspberry Pi, Docker) в виде **нативных системных уведомлений** на ПК с Windows 11 и MacBook в локальной сети. Бинарник — `homeping`; историческое рабочее название проекта — HA-Notifications (имя каталога репозитория).
+**HomePing** — your home "pings" you: it delivers Home Assistant sensor state changes (Raspberry Pi, Docker) as **native desktop notifications** to Windows 11 and macOS machines on your local network. The binary is `homeping`; the historical working name of the project is HA-Notifications (the repository directory name).
 
-## Как это работает (в двух словах)
+## How it works (in a nutshell)
 
-Лёгкий агент `homeping` (Go, один бинарник ~10 МБ) живёт в трее (Windows) / строке меню (macOS), подключается к WebSocket API Home Assistant по long-lived token, подписывается на события выбранных сущностей (например, `binary_sensor.front_door`) и при смене состояния показывает нативное уведомление ОС. Настраивается через встроенную страницу настроек в браузере (только `127.0.0.1`); токен хранится в системном хранилище учётных данных.
+A lightweight `homeping` agent (Go, single ~10 MB binary) lives in the system tray (Windows) / menu bar (macOS), connects to the Home Assistant WebSocket API with a long-lived access token, subscribes to state changes of the entities you pick (e.g. `binary_sensor.front_door`), and shows a native OS notification whenever a state changes. It is configured through a built-in settings page in your browser (bound to `127.0.0.1` only); the token is kept in the OS credential store (Windows Credential Manager / macOS Keychain).
 
 ```
-[Датчики] → [Home Assistant на RPi] ──WebSocket──> [homeping на Windows] → тост Windows
-                                    ──WebSocket──> [homeping на macOS]   → уведомление macOS
+[Sensors] → [Home Assistant on RPi] ──WebSocket──> [homeping on Windows] → Windows toast
+                                    ──WebSocket──> [homeping on macOS]   → macOS notification
 ```
 
-## Карта документации
+Key properties:
 
-| Документ | Что внутри |
+- **Zero extra infrastructure** — talks to the stock Home Assistant WebSocket API; no MQTT broker, no cloud, no push services.
+- **Instant and resilient** — server-side event filtering (`subscribe_trigger`), exponential-backoff reconnect, ping/pong liveness checks, one-shot "HA is unreachable / connection restored" notifications.
+- **Lightweight** — single static binary, no runtimes, steady-state memory in the tens of megabytes.
+- **Hot-reload** — settings saved from the web UI (or a manual YAML edit + "Reload config") apply without restarting the agent.
+
+## Documentation map
+
+The documentation is written in Russian (the project's working language).
+
+| Document | What's inside |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Архитектура: компоненты, потоки данных, безопасность, отказоустойчивость |
-| [docs/adr/ADR-001-transport.md](docs/adr/ADR-001-transport.md) | Почему WebSocket API, а не MQTT / ntfy / Telegram |
-| [docs/adr/ADR-002-language.md](docs/adr/ADR-002-language.md) | Почему агент на Go |
-| [docs/adr/ADR-003-ui-stack.md](docs/adr/ADR-003-ui-stack.md) | UI v2: systray, локальный веб-интерфейс, keyring |
-| [docs/spec.md](docs/spec.md) | Функциональная спецификация агента: конфиг, поведение, логирование |
-| [docs/setup-home-assistant.md](docs/setup-home-assistant.md) | Подготовка Home Assistant: токен, проверка API |
-| [docs/setup-clients.md](docs/setup-clients.md) | Установка и автозапуск агента на Windows и macOS |
-| [docs/tasks/README.md](docs/tasks/README.md) | Декомпозиция реализации на задачи для ИИ-агентов |
+| [docs/architecture.md](docs/architecture.md) | Architecture: components, data flows, security, resilience |
+| [docs/adr/ADR-001-transport.md](docs/adr/ADR-001-transport.md) | Why the WebSocket API and not MQTT / ntfy / Telegram |
+| [docs/adr/ADR-002-language.md](docs/adr/ADR-002-language.md) | Why the agent is written in Go |
+| [docs/adr/ADR-003-ui-stack.md](docs/adr/ADR-003-ui-stack.md) | UI v2: systray, local web UI, keyring |
+| [docs/spec.md](docs/spec.md) | Functional specification: config, behaviour, tray, web UI, logging |
+| [docs/setup-home-assistant.md](docs/setup-home-assistant.md) | Home Assistant preparation: token, API check |
+| [docs/setup-clients.md](docs/setup-clients.md) | Installing and autostarting the agent on Windows and macOS |
+| [docs/tasks/README.md](docs/tasks/README.md) | Implementation breakdown into tasks for AI agents |
 
-## Сборка
+## Installation
 
-Готовые дистрибутивы собирает GitHub Actions по тегу `v*` — см. страницу Releases. Локально (Go ≥ 1.22 и git):
+Grab a build from the [Releases](https://github.com/amur27/ha-homeping/releases) page:
+
+- `homeping.exe` — Windows 11 (amd64), GUI subsystem (no console window);
+- `homeping-macos-arm64.zip` — `HomePing.app` for macOS (Apple Silicon), menu-bar only (`LSUIElement`).
+
+Run it once — the agent creates a starter config and opens the settings page where you enter the HA URL and token. See [docs/setup-clients.md](docs/setup-clients.md) for autostart setup and troubleshooting.
+
+## Building from source
+
+Release builds are produced by GitHub Actions on `v*` tags. Locally (Go ≥ 1.22 and git):
 
 ```powershell
-# Windows: dist/homeping.exe — иконка, GUI-подсистема (без консоли)
+# Windows: dist/homeping.exe — icon, GUI subsystem (no console)
 .\scripts\build.ps1
 ```
 
 ```bash
-# macOS: dist/HomePing.app + zip (только на macOS — systray требует cgo)
+# macOS: dist/HomePing.app + zip (macOS only — systray requires cgo)
 ./scripts/package-macos.sh
 ```
 
-Версия зашивается из `git describe` и доступна через `homeping -version`, в меню трея и на странице настроек. Кросс-компиляция darwin-бинарника с Windows невозможна с v2 (cgo) — этим занимается CI.
+The version is embedded from `git describe` and is visible via `homeping -version`, in the tray menu and on the settings page. Cross-compiling the darwin binary from Windows is not possible since v2 (cgo) — CI takes care of it.
 
-Проверка после установки: «Тестовое уведомление» в меню трея (или `homeping -test`).
+Post-install check: "Test notification" in the tray menu (or `homeping -test`).
 
-## Порядок работы
+## Status
 
-1. Прочитать [architecture.md](docs/architecture.md) и [spec.md](docs/spec.md).
-2. Настроить Home Assistant по [setup-home-assistant.md](docs/setup-home-assistant.md) (токены, entity_id).
-3. Собрать бинарники (раздел «Сборка») и развернуть по [setup-clients.md](docs/setup-clients.md).
-
-## Статус
-
-- **v1** (task-01…06) выполнена: ядро агента работает в эксплуатации.
-- **v2** (task-07…10) реализована: трей, веб-интерфейс настроек, токен в keyring, hot-reload, упаковка и CI. Осталось: сквозной сценарий приёмки v2 на реальном окружении, включая MacBook — см. [docs/tasks/README.md](docs/tasks/README.md).
+- **v1** (task-01…06) done: the agent core is in production use.
+- **v2** (task-07…10) implemented: tray, web settings UI, token in the OS keyring, hot-reload, packaging and CI. Remaining: the end-to-end v2 acceptance run on real hardware, including a MacBook — see [docs/tasks/README.md](docs/tasks/README.md).
