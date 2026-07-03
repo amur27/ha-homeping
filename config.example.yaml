@@ -1,7 +1,7 @@
-# Пример конфигурации агента homecrier.
+# Пример конфигурации агента homeping.
 # Логика файла: образец для копирования в стандартный каталог настроек ОС
-# (Windows: %APPDATA%\homecrier\config.yaml,
-#  macOS: ~/Library/Application Support/homecrier/config.yaml).
+# (Windows: %APPDATA%\homeping\config.yaml,
+#  macOS: ~/Library/Application Support/homeping/config.yaml).
 # Токен в этом файле НЕ хранится — только имя переменной окружения.
 # Полное описание формата — docs/spec.md, раздел 3.
 

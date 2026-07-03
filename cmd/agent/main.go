@@ -1,4 +1,4 @@
-// Точка входа агента homecrier.
+// Точка входа агента homeping.
 // Логика модуля: разбор флагов командной строки (-config, -test, -version),
 // загрузка и валидация конфигурации, настройка логирования (slog),
 // graceful shutdown по сигналам ОС и запуск основного цикла агента.
@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"homecrier/internal/config"
-	"homecrier/internal/hass"
-	"homecrier/internal/notify"
+	"homeping/internal/config"
+	"homeping/internal/hass"
+	"homeping/internal/notify"
 )
 
 // version зашивается при сборке релиза через ldflags (см. task-06).
@@ -64,7 +64,7 @@ func run() int {
 	if *testMode {
 		// Пробное уведомление для проверки разрешений ОС; конфиг
 		// уже проверен выше — режим -test валидирует и его.
-		if err := (notify.Beeep{}).Show("HomeCrier", "Агент работает — уведомления настроены правильно"); err != nil {
+		if err := (notify.Beeep{}).Show("HomePing", "Агент работает — уведомления настроены правильно"); err != nil {
 			fmt.Fprintf(os.Stderr, "не удалось показать пробное уведомление: %v\n", err)
 			return 1
 		}
@@ -123,12 +123,12 @@ func run() int {
 	if cfg.NotifyOnDisconnect() {
 		notifier := notify.Beeep{}
 		sup.OnDown = func() {
-			if err := notifier.Show("HomeCrier", "⚠️ Home Assistant недоступен"); err != nil {
+			if err := notifier.Show("HomePing", "⚠️ Home Assistant недоступен"); err != nil {
 				slog.Warn("не удалось показать уведомление о простое", "error", err)
 			}
 		}
 		sup.OnUp = func() {
-			if err := notifier.Show("HomeCrier", "✅ Связь с Home Assistant восстановлена"); err != nil {
+			if err := notifier.Show("HomePing", "✅ Связь с Home Assistant восстановлена"); err != nil {
 				slog.Warn("не удалось показать уведомление о восстановлении", "error", err)
 			}
 		}

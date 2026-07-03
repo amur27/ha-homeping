@@ -1,4 +1,4 @@
-module homecrier
+module homeping
 
 go 1.26.3
 

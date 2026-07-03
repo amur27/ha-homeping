@@ -13,7 +13,7 @@
 
 ## Шаги
 
-1. `go mod init homecrier`, Go ≥ 1.22.
+1. `go mod init homeping`, Go ≥ 1.22.
 2. Создать структуру:
    ```
    cmd/agent/main.go      — точка входа

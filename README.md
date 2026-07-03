@@ -1,16 +1,16 @@
 <!-- Этот файл — точка входа в проект: краткое описание решения, карта документации и порядок работы с ней. -->
 
-# HomeCrier
+# HomePing
 
-**HomeCrier** («городской глашатай» твоего дома) — доставка статусов датчиков Home Assistant (Raspberry Pi, Docker) в виде **нативных системных уведомлений** на ПК с Windows 11 и MacBook в локальной сети. Бинарник — `homecrier`; историческое рабочее название проекта — HA-Notifications (имя каталога репозитория).
+**HomePing** — твой дом «пингует» тебя: доставка статусов датчиков Home Assistant (Raspberry Pi, Docker) в виде **нативных системных уведомлений** на ПК с Windows 11 и MacBook в локальной сети. Бинарник — `homeping`; историческое рабочее название проекта — HA-Notifications (имя каталога репозитория).
 
 ## Как это работает (в двух словах)
 
-Лёгкий агент `homecrier` (Go, один бинарник) запускается на каждом компьютере, подключается к WebSocket API Home Assistant по long-lived token, подписывается на события выбранных сущностей (например, `binary_sensor.front_door`) и при смене состояния показывает нативное уведомление ОС.
+Лёгкий агент `homeping` (Go, один бинарник) запускается на каждом компьютере, подключается к WebSocket API Home Assistant по long-lived token, подписывается на события выбранных сущностей (например, `binary_sensor.front_door`) и при смене состояния показывает нативное уведомление ОС.
 
 ```
-[Датчики] → [Home Assistant на RPi] ──WebSocket──> [homecrier на Windows] → тост Windows
-                                    ──WebSocket──> [homecrier на macOS]   → уведомление macOS
+[Датчики] → [Home Assistant на RPi] ──WebSocket──> [homeping на Windows] → тост Windows
+                                    ──WebSocket──> [homeping на macOS]   → уведомление macOS
 ```
 
 ## Карта документации
@@ -39,9 +39,9 @@
 ./scripts/build.sh
 ```
 
-Результат в `dist/`: `homecrier.exe` (Windows amd64) и `homecrier-darwin-arm64` (macOS Apple Silicon). Версия зашивается из `git describe` и доступна через `homecrier -version`. Обе платформы собираются без cgo (`CGO_ENABLED=0`) с любой машины.
+Результат в `dist/`: `homeping.exe` (Windows amd64) и `homeping-darwin-arm64` (macOS Apple Silicon). Версия зашивается из `git describe` и доступна через `homeping -version`. Обе платформы собираются без cgo (`CGO_ENABLED=0`) с любой машины.
 
-Проверка после установки: `homecrier -test` — должно появиться нативное уведомление ОС.
+Проверка после установки: `homeping -test` — должно появиться нативное уведомление ОС.
 
 ## Порядок работы
 

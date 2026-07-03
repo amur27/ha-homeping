@@ -11,14 +11,14 @@ import (
 )
 
 // appDirName — имя каталога агента внутри стандартного каталога настроек ОС.
-const appDirName = "homecrier"
+const appDirName = "homeping"
 
 // configFileName — имя файла конфигурации внутри каталога агента.
 const configFileName = "config.yaml"
 
 // DefaultPath возвращает путь к конфигу по умолчанию для текущей ОС:
-//   - Windows: %APPDATA%\homecrier\config.yaml
-//   - macOS:   ~/Library/Application Support/homecrier/config.yaml
+//   - Windows: %APPDATA%\homeping\config.yaml
+//   - macOS:   ~/Library/Application Support/homeping/config.yaml
 //
 // Оба варианта покрываются os.UserConfigDir, что гарантирует единообразие
 // с разделом 2 спецификации без платформенных ветвлений.

@@ -21,12 +21,12 @@ func TestDefaultPathIn(t *testing.T) {
 		{
 			name:    "windows APPDATA",
 			baseDir: `C:\Users\test\AppData\Roaming`,
-			want:    filepath.Join(`C:\Users\test\AppData\Roaming`, "homecrier", "config.yaml"),
+			want:    filepath.Join(`C:\Users\test\AppData\Roaming`, "homeping", "config.yaml"),
 		},
 		{
 			name:    "macOS Application Support",
 			baseDir: "/Users/test/Library/Application Support",
-			want:    filepath.Join("/Users/test/Library/Application Support", "homecrier", "config.yaml"),
+			want:    filepath.Join("/Users/test/Library/Application Support", "homeping", "config.yaml"),
 		},
 	}
 
@@ -41,14 +41,14 @@ func TestDefaultPathIn(t *testing.T) {
 }
 
 // TestDefaultPath проверяет, что для текущей ОС путь строится без ошибки
-// и оканчивается на homecrier/config.yaml внутри непустого базового каталога.
+// и оканчивается на homeping/config.yaml внутри непустого базового каталога.
 func TestDefaultPath(t *testing.T) {
 	got, err := DefaultPath()
 	if err != nil {
 		t.Fatalf("DefaultPath() вернула ошибку: %v", err)
 	}
 
-	wantSuffix := filepath.Join("homecrier", "config.yaml")
+	wantSuffix := filepath.Join("homeping", "config.yaml")
 	if !strings.HasSuffix(got, wantSuffix) {
 		t.Errorf("DefaultPath() = %q, путь должен оканчиваться на %q", got, wantSuffix)
 	}

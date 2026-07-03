@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"homecrier/internal/config"
+	"homeping/internal/config"
 )
 
 // fakeNotifier потокобезопасно записывает все показанные уведомления.

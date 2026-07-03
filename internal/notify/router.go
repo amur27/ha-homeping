@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"homecrier/internal/config"
+	"homeping/internal/config"
 )
 
 // message — готовое к показу уведомление.

@@ -16,7 +16,7 @@ import (
 // Имя приложения для системных механизмов уведомлений
 // (на Windows отображается как отправитель тоста).
 func init() {
-	beeep.AppName = "HomeCrier"
+	beeep.AppName = "HomePing"
 }
 
 // Notifier — показ одного нативного уведомления ОС.
