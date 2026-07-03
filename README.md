@@ -4,6 +4,8 @@
 
 # HomePing
 
+[![Release](https://img.shields.io/github/v/release/amur27/ha-homeping)](https://github.com/amur27/ha-homeping/releases/latest)
+
 **HomePing** — your home "pings" you: it delivers Home Assistant sensor state changes (Raspberry Pi, Docker) as **native desktop notifications** to Windows 11 and macOS machines on your local network. The binary is `homeping`; the historical working name of the project is HA-Notifications (the repository directory name).
 
 ## How it works (in a nutshell)

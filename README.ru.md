@@ -4,6 +4,8 @@
 
 # HomePing
 
+[![Релиз](https://img.shields.io/github/v/release/amur27/ha-homeping)](https://github.com/amur27/ha-homeping/releases/latest)
+
 **HomePing** — твой дом «пингует» тебя: доставка статусов датчиков Home Assistant (Raspberry Pi, Docker) в виде **нативных системных уведомлений** на ПК с Windows 11 и MacBook в локальной сети. Бинарник — `homeping`; историческое рабочее название проекта — HA-Notifications (имя каталога репозитория).
 
 ## Как это работает (в двух словах)
